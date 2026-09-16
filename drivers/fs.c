@@ -31,25 +31,44 @@ static void auto_name(char* out) {
     strcat(out, ".txt");
 }
 
+static void add_entry(const char* name, unsigned int size_kb, const char* type, unsigned char is_dir, unsigned char location) {
+    if (file_count >= FS_MAX_FILES) return;
+
+    copy_bounded(files[file_count].name, name, FS_NAME_MAX);
+    files[file_count].size_kb = size_kb;
+    copy_bounded(files[file_count].type, type, FS_TYPE_MAX);
+    files[file_count].is_dir = is_dir;
+    files[file_count].location = location;
+    file_count++;
+}
+
 void fs_init(void) {
     file_count = 0;
     next_untitled = 1;
 
-    copy_bounded(files[file_count].name, "kernel.bin", FS_NAME_MAX);
-    files[file_count].size_kb = 42;
-    copy_bounded(files[file_count].type, "ELF32", FS_TYPE_MAX);
-    files[file_count].is_dir = 0;
-    file_count++;
-
-    copy_bounded(files[file_count].name, "drivers/", FS_NAME_MAX);
-    files[file_count].size_kb = 0;
-    copy_bounded(files[file_count].type, "TREE", FS_TYPE_MAX);
-    files[file_count].is_dir = 1;
-    file_count++;
+    add_entry("kernel.bin", 42, "ELF32", 0, FS_LOC_LEFT);
+    add_entry("drivers/",    0, "TREE",  1, FS_LOC_LEFT);
+    add_entry("backup/",     0, "TREE",  1, FS_LOC_RIGHT);
+    add_entry("notes.txt",   4, "TXT",   0, FS_LOC_RIGHT);
 }
 
-int fs_count(void) {
-    return file_count;
+int fs_count(int location) {
+    int c = 0;
+    for (int i = 0; i < file_count; i++) {
+        if (files[i].location == (unsigned char)location) c++;
+    }
+    return c;
+}
+
+int fs_get_index(int location, int nth) {
+    int c = 0;
+    for (int i = 0; i < file_count; i++) {
+        if (files[i].location == (unsigned char)location) {
+            if (c == nth) return i;
+            c++;
+        }
+    }
+    return -1;
 }
 
 const fs_entry_t* fs_get(int index) {
@@ -57,7 +76,7 @@ const fs_entry_t* fs_get(int index) {
     return &files[index];
 }
 
-int fs_create(const char* name) {
+int fs_create(int location, const char* name) {
     if (file_count >= FS_MAX_FILES) return -1;
 
     int idx = file_count;
@@ -73,6 +92,7 @@ int fs_create(const char* name) {
     files[idx].size_kb = 0;
     copy_bounded(files[idx].type, "TXT", FS_TYPE_MAX);
     files[idx].is_dir = 0;
+    files[idx].location = (unsigned char)location;
     file_count++;
     return idx;
 }
@@ -93,4 +113,22 @@ int fs_rename(int index, const char* name) {
 
     copy_bounded(files[index].name, name, FS_NAME_MAX);
     return 0;
+}
+
+int fs_move(int index, int new_location) {
+    if (index < 0 || index >= file_count) return -1;
+
+    files[index].location = (unsigned char)new_location;
+    return 0;
+}
+
+int fs_copy(int index, int new_location) {
+    if (index < 0 || index >= file_count) return -1;
+    if (file_count >= FS_MAX_FILES) return -1;
+
+    int new_idx = file_count;
+    files[new_idx] = files[index];
+    files[new_idx].location = (unsigned char)new_location;
+    file_count++;
+    return new_idx;
 }

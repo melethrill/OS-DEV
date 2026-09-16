@@ -17,7 +17,9 @@ void ui_draw_desktop(void);
 void ui_update_telemetry(unsigned int ticks);
 void ui_draw_cursor(int x, int y);
 void ui_handle_key(char c);
-active_box_t ui_handle_click(int mouse_x, int mouse_y);
+void ui_handle_mouse_down(int mouse_x, int mouse_y);
+void ui_handle_mouse_up(int mouse_x, int mouse_y);
+void ui_handle_mouse_move(int mouse_x, int mouse_y);
 active_box_t ui_get_active_box(void);
 
 #endif

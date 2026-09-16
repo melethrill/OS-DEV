@@ -13,9 +13,23 @@ static const char kbd_us[128] = {
   '*',   0, ' '
 };
 
+static volatile unsigned char ctrl_held = 0;
+
+#define SCANCODE_LCTRL_MAKE  0x1D
+#define SCANCODE_LCTRL_BREAK 0x9D
+
 static void keyboard_callback(struct regs* r) {
     (void)r;
     unsigned char scancode = inb(KEYBOARD_DATA_PORT);
+
+    if (scancode == SCANCODE_LCTRL_MAKE) {
+        ctrl_held = 1;
+        return;
+    }
+    if (scancode == SCANCODE_LCTRL_BREAK) {
+        ctrl_held = 0;
+        return;
+    }
 
     if (scancode & 0x80) {
         return;
@@ -27,6 +41,10 @@ static void keyboard_callback(struct regs* r) {
             ui_handle_key(c);
         }
     }
+}
+
+unsigned char keyboard_ctrl_held(void) {
+    return ctrl_held;
 }
 
 void keyboard_install(void) {
