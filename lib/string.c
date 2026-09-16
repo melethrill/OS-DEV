@@ -34,3 +34,16 @@ void memset(void* dest, unsigned char val, unsigned int len) {
         ptr[i] = val;
     }
 }
+
+char* strcpy(char* dest, const char* src) {
+    char* ret = dest;
+    while ((*dest++ = *src++));
+    return ret;
+}
+
+char* strcat(char* dest, const char* src) {
+    char* ret = dest;
+    while (*dest) dest++;
+    while ((*dest++ = *src++));
+    return ret;
+}

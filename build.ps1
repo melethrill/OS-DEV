@@ -24,6 +24,7 @@ clang $CLANG_FLAGS.Split() -c drivers/vga.c -o drivers/vga.o
 clang $CLANG_FLAGS.Split() -c drivers/timer.c -o drivers/timer.o
 clang $CLANG_FLAGS.Split() -c drivers/keyboard.c -o drivers/keyboard.o
 clang $CLANG_FLAGS.Split() -c drivers/mouse.c -o drivers/mouse.o
+clang $CLANG_FLAGS.Split() -c drivers/fs.c -o drivers/fs.o
 clang $CLANG_FLAGS.Split() -c drivers/ui.c -o drivers/ui.o
 
 Write-Host "Compiling kernel..."
@@ -32,7 +33,7 @@ clang $CLANG_FLAGS.Split() -c kernel/kernel.c -o kernel/kernel.o
 Write-Host "Linking kernel..."
 clang -target i386-unknown-none-elf -fuse-ld=lld -nostdlib "-Wl,-T,linker.ld" -o kernel.bin `
     arch/boot.o arch/interrupts.o arch/idt.o arch/isr.o arch/pic.o arch/irq.o `
-    drivers/fb.o drivers/vga.o drivers/timer.o drivers/keyboard.o drivers/mouse.o drivers/ui.o `
+    drivers/fb.o drivers/vga.o drivers/timer.o drivers/keyboard.o drivers/mouse.o drivers/fs.o drivers/ui.o `
     lib/string.o kernel/kernel.o
 
 Write-Host "Launching QEMU..."

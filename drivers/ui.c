@@ -1,5 +1,7 @@
 #include "ui.h"
 #include "fb.h"
+#include "fs.h"
+#include "string.h"
 
 #define COLOR_DESKTOP_BG  0x001B2234
 #define COLOR_PANEL_BG    0x00121722
@@ -22,6 +24,13 @@ static active_box_t current_active_box = BOX_NONE;
 #define INPUT_BUF_MAX 64
 static char input_buf[INPUT_BUF_MAX + 1];
 static int input_len = 0;
+
+#define FS_ROW_H  20
+#define FS_BTN_W  140
+#define FS_BTN_H  26
+#define FS_BTN_GAP 12
+static int fs_selected_index = -1;
+static const char* const fs_btn_labels[3] = { "NEW", "DELETE", "RENAME" };
 
 static const unsigned short cursor_mask[16] = {
     0b1000000000000000,
@@ -117,6 +126,119 @@ void ui_handle_key(char c) {
     draw_input_line();
 }
 
+static void files_content_rect(int* x, int* y, int* w, int* h) {
+    if (current_active_box == BOX_FILES) {
+        *x = 24;
+        *y = 48;
+        *w = 1920 - (24 * 2);
+        *h = 1080 - 48 - 24;
+    } else {
+        *x = boxes[1].x;
+        *y = boxes[1].y;
+        *w = boxes[1].w;
+        *h = boxes[1].h;
+    }
+}
+
+static void uint_to_str(unsigned int n, char* buf) {
+    char tmp[12];
+    int t = 0, i = 0;
+
+    if (n == 0) {
+        buf[0] = '0';
+        buf[1] = '\0';
+        return;
+    }
+    while (n > 0) { tmp[t++] = '0' + (n % 10); n /= 10; }
+    while (t > 0) buf[i++] = tmp[--t];
+    buf[i] = '\0';
+}
+
+static void draw_files_panel(void) {
+    int bx, by, bw, bh;
+    files_content_rect(&bx, &by, &bw, &bh);
+
+    fb_fillrect(bx + 1, by + 25, bw - 2, bh - 26, COLOR_PANEL_BG);
+    fb_draw_string(bx + 16, by + 40, "NAME           SIZE     TYPE", COLOR_TEXT_DIM, COLOR_TRANSPARENT);
+
+    int btn_y = by + bh - FS_BTN_H - 12;
+    int row_y = by + 60;
+    int count = fs_count();
+
+    for (int i = 0; i < count && row_y < btn_y - FS_ROW_H; i++) {
+        const fs_entry_t* f = fs_get(i);
+        if (!f) continue;
+
+        int selected = (i == fs_selected_index);
+        fb_fillrect(bx + 12, row_y - 2, bw - 24, FS_ROW_H, selected ? COLOR_HEADER_BG : COLOR_PANEL_BG);
+
+        char line[FS_NAME_MAX + 24];
+        char num[12];
+        uint_to_str(f->size_kb, num);
+
+        strcpy(line, f->name);
+        strcat(line, "  ");
+        strcat(line, f->is_dir ? "<DIR>" : num);
+        if (!f->is_dir) strcat(line, "KB");
+        strcat(line, " ");
+        strcat(line, f->type);
+
+        fb_draw_string(bx + 16, row_y, line, f->is_dir ? COLOR_ACCENT_CYAN : COLOR_TEXT_WHITE, COLOR_TRANSPARENT);
+        row_y += FS_ROW_H;
+    }
+
+    for (int i = 0; i < 3; i++) {
+        int btnx = bx + 16 + i * (FS_BTN_W + FS_BTN_GAP);
+        fb_fillrect(btnx, btn_y, FS_BTN_W, FS_BTN_H, COLOR_HEADER_BG);
+        fb_drawrect(btnx, btn_y, FS_BTN_W, FS_BTN_H, COLOR_ACCENT_CYAN);
+        fb_draw_string(btnx + 16, btn_y + 9, fs_btn_labels[i], COLOR_ACCENT_CYAN, COLOR_HEADER_BG);
+    }
+}
+
+static void files_run_action(int action) {
+    if (action == 0) {
+        int idx = fs_create(input_len > 0 ? input_buf : 0);
+        if (idx >= 0) fs_selected_index = idx;
+    } else if (action == 1) {
+        if (fs_selected_index >= 0) {
+            fs_delete(fs_selected_index);
+            fs_selected_index = -1;
+        }
+    } else if (action == 2) {
+        if (fs_selected_index >= 0 && input_len > 0) {
+            fs_rename(fs_selected_index, input_buf);
+        }
+    }
+}
+
+static int files_handle_click(int mx, int my) {
+    int bx, by, bw, bh;
+    files_content_rect(&bx, &by, &bw, &bh);
+
+    int btn_y = by + bh - FS_BTN_H - 12;
+    for (int i = 0; i < 3; i++) {
+        int btnx = bx + 16 + i * (FS_BTN_W + FS_BTN_GAP);
+        if (mx >= btnx && mx <= btnx + FS_BTN_W && my >= btn_y && my <= btn_y + FS_BTN_H) {
+            files_run_action(i);
+            draw_files_panel();
+            return 1;
+        }
+    }
+
+    int row_y = by + 60;
+    int count = fs_count();
+    for (int i = 0; i < count && row_y < btn_y - FS_ROW_H; i++) {
+        if (my >= row_y - 2 && my < row_y - 2 + FS_ROW_H && mx >= bx + 12 && mx <= bx + bw - 12) {
+            fs_selected_index = i;
+            draw_files_panel();
+            return 1;
+        }
+        row_y += FS_ROW_H;
+    }
+
+    return 0;
+}
+
 static void draw_window_card(int x, int y, int w, int h, const char* title, int active) {
     fb_fillrect(x + 6, y + 6, w, h, 0x000B0E14); 
     fb_fillrect(x, y, w, h, COLOR_PANEL_BG);
@@ -155,9 +277,7 @@ void ui_draw_desktop(void) {
         fb_draw_string(boxes[0].x + 24, boxes[0].y + 80, ">> DUMP_MEMORY", COLOR_TEXT_WHITE, COLOR_TRANSPARENT);
         draw_input_line();
 
-        fb_draw_string(boxes[1].x + 16, boxes[1].y + 40, "NAME           SIZE     TYPE", COLOR_TEXT_DIM, COLOR_TRANSPARENT);
-        fb_draw_string(boxes[1].x + 16, boxes[1].y + 60, "kernel.bin     42 KB    ELF32", COLOR_TEXT_WHITE, COLOR_TRANSPARENT);
-        fb_draw_string(boxes[1].x + 16, boxes[1].y + 80, "drivers/       <DIR>    TREE", COLOR_ACCENT_CYAN, COLOR_TRANSPARENT);
+        draw_files_panel();
 
         fb_draw_string(boxes[3].x + 16, boxes[3].y + 40, "[ACTIVE PIPELINE]", COLOR_TEXT_DIM, COLOR_TRANSPARENT);
         fb_draw_string(boxes[3].x + 24, boxes[3].y + 60, "[IRQ0: PIT Timer] ===> [Event Pump]", COLOR_ACCENT_GRN, COLOR_TRANSPARENT);
@@ -166,8 +286,15 @@ void ui_draw_desktop(void) {
     } else {
         int idx = (int)current_active_box - 1;
         draw_window_card(margin, top, 1920 - (margin * 2), 1080 - top - margin, boxes[idx].title, 1);
-        fb_draw_string(margin + 16, top + 40, "MAXIMIZED VIEW -- Click to restore", COLOR_ACCENT_CYAN, COLOR_TRANSPARENT);
-        if (current_active_box == BOX_SHELL) draw_input_line();
+
+        if (current_active_box == BOX_SHELL) {
+            fb_draw_string(margin + 16, top + 40, "MAXIMIZED VIEW -- Click to restore", COLOR_ACCENT_CYAN, COLOR_TRANSPARENT);
+            draw_input_line();
+        } else if (current_active_box == BOX_FILES) {
+            draw_files_panel();
+        } else {
+            fb_draw_string(margin + 16, top + 40, "MAXIMIZED VIEW -- Click to restore", COLOR_ACCENT_CYAN, COLOR_TRANSPARENT);
+        }
     }
 }
 
@@ -195,6 +322,15 @@ void ui_update_telemetry(unsigned int ticks) {
 active_box_t ui_handle_click(int mouse_x, int mouse_y) {
     if (mouse_y < 24) return current_active_box;
 
+    if (current_active_box == BOX_FILES) {
+        if (files_handle_click(mouse_x, mouse_y)) {
+            return current_active_box;
+        }
+        current_active_box = BOX_NONE;
+        ui_draw_desktop();
+        return current_active_box;
+    }
+
     if (current_active_box != BOX_NONE) {
         current_active_box = BOX_NONE;
         ui_draw_desktop();
@@ -218,5 +354,6 @@ active_box_t ui_get_active_box(void) {
 
 void ui_init(void) {
     current_active_box = BOX_NONE;
+    fs_init();
     ui_draw_desktop();
 }
