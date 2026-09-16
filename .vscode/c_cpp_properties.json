@@ -1,0 +1,20 @@
+{
+    "configurations": [
+        {
+            "name": "OS-Dev-Clang",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [],
+            "compilerPath": "C:/Program Files/LLVM/bin/clang.exe",
+            "cStandard": "c11",
+            "intelliSenseMode": "windows-clang-x86",
+            "compilerArgs": [
+                "-target",
+                "i386-unknown-none-elf",
+                "-ffreestanding"
+            ]
+        }
+    ],
+    "version": 4
+}
